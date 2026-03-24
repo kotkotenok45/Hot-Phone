@@ -3,51 +3,72 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Phone Warmer</title>
+    <title>Extreme Phone Warmer</title>
     <style>
         body {
-            font-family: sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #000;
+            color: #ff3300;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             height: 100vh;
             margin: 0;
-            background-color: #1a1a1a;
-            color: white;
-            transition: background-color 0.5s;
+            overflow: hidden;
         }
-        #status { font-size: 1.2rem; margin-bottom: 20px; }
+        #status { margin-bottom: 20px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px; }
         button {
-            padding: 20px 40px;
-            font-size: 1.5 font-weight: bold;
+            width: 200px;
+            height: 200px;
+            border-radius: 50%;
+            border: 5px solid #ff3300;
+            background: transparent;
+            color: #ff3300;
+            font-size: 1.2rem;
+            font-weight: 900;
             cursor: pointer;
-            border: none;
-            border-radius: 50px;
-            background: #ff4500;
-            color: white;
-            box-shadow: 0 4px 15px rgba(255, 69, 0, 0.4);
+            box-shadow: 0 0 20px #ff3300;
+            transition: all 0.3s;
         }
-        button:active { transform: scale(0.95); }
-        .running { background-color: #4b0000; }
+        button.active {
+            background: #ff3300;
+            color: #000;
+            box-shadow: 0 0 50px #ff3300, inset 0 0 20px #000;
+            animation: pulse 1s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; opacity: 0.2; }
     </style>
 </head>
 <body>
 
-    <div id="status">Статус: Ожидание</div>
-    <button id="toggleBtn">ЗАПУСТИТЬ НАГРЕВ</button>
+    <div id="status">Система: Ожидание</div>
+    <button id="toggleBtn">МАКСИМУМ</button>
+    <canvas id="gpuCanvas"></canvas>
 
     <script>
         let isRunning = false;
         let workers = [];
         const btn = document.getElementById('toggleBtn');
         const statusText = document.getElementById('status');
+        const canvas = document.getElementById('gpuCanvas');
+        const gl = canvas.getContext('webgl');
 
-        // Код воркера в виде строки
+        // CPU + RAM Stress Worker
         const workerCode = `
             self.onmessage = function() {
+                let storage = [];
                 while (true) {
-                    Math.sqrt(Math.random() * Math.random());
+                    // CPU Stress
+                    for(let i=0; i<100000; i++) { Math.atan(Math.random()) * Math.exp(Math.random()); }
+                    // RAM Stress (постоянное выделение памяти)
+                    if (storage.length > 500) storage = [];
+                    storage.push(new Float64Array(10000));
                 }
             };
         `;
@@ -55,30 +76,35 @@
         const blob = new Blob([workerCode], { type: 'application/javascript' });
         const workerUrl = URL.createObjectURL(blob);
 
+        function stressGPU() {
+            if (!isRunning) return;
+            // Заставляем WebGL рисовать мусор каждый кадр
+            gl.clearColor(Math.random(), Math.random(), Math.random(), 1.0);
+            gl.clear(gl.COLOR_BUFFER_BIT);
+            requestAnimationFrame(stressGPU);
+        }
+
         btn.onclick = () => {
             if (!isRunning) {
-                // Запуск
-                const threads = navigator.hardwareConcurrency || 4;
+                const threads = (navigator.hardwareConcurrency || 4) * 2; // Удваиваем потоки для агрессии
                 for (let i = 0; i < threads; i++) {
                     const w = new Worker(workerUrl);
-                    w.postMessage('start');
+                    w.postMessage('go');
                     workers.push(w);
                 }
                 
                 isRunning = true;
-                btn.innerText = "ОСТАНОВИТЬ";
-                btn.style.background = "#555";
-                statusText.innerText = "Статус: НАГРЕВ (Потоков: " + threads + ")";
-                document.body.classList.add('running');
+                btn.classList.add('active');
+                btn.innerText = "СТОП";
+                statusText.innerText = "РЕЖИМ: ЭКСТРЕМАЛЬНЫЙ НАГРЕВ";
+                stressGPU();
             } else {
-                // Остановка
                 workers.forEach(w => w.terminate());
                 workers = [];
                 isRunning = false;
-                btn.innerText = "ЗАПУСТИТЬ НАГРЕВ";
-                btn.style.background = "#ff4500";
-                statusText.innerText = "Статус: Ожидание";
-                document.body.classList.remove('running');
+                btn.classList.remove('active');
+                btn.innerText = "МАКСИМУМ";
+                statusText.innerText = "Система: Ожидание";
             }
         };
     </script>
