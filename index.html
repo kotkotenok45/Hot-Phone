@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phone Warmer</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #1a1a1a;
+            color: white;
+            transition: background-color 0.5s;
+        }
+        #status { font-size: 1.2rem; margin-bottom: 20px; }
+        button {
+            padding: 20px 40px;
+            font-size: 1.5 font-weight: bold;
+            cursor: pointer;
+            border: none;
+            border-radius: 50px;
+            background: #ff4500;
+            color: white;
+            box-shadow: 0 4px 15px rgba(255, 69, 0, 0.4);
+        }
+        button:active { transform: scale(0.95); }
+        .running { background-color: #4b0000; }
+    </style>
+</head>
+<body>
+
+    <div id="status">Статус: Ожидание</div>
+    <button id="toggleBtn">ЗАПУСТИТЬ НАГРЕВ</button>
+
+    <script>
+        let isRunning = false;
+        let workers = [];
+        const btn = document.getElementById('toggleBtn');
+        const statusText = document.getElementById('status');
+
+        // Код воркера в виде строки
+        const workerCode = `
+            self.onmessage = function() {
+                while (true) {
+                    Math.sqrt(Math.random() * Math.random());
+                }
+            };
+        `;
+
+        const blob = new Blob([workerCode], { type: 'application/javascript' });
+        const workerUrl = URL.createObjectURL(blob);
+
+        btn.onclick = () => {
+            if (!isRunning) {
+                // Запуск
+                const threads = navigator.hardwareConcurrency || 4;
+                for (let i = 0; i < threads; i++) {
+                    const w = new Worker(workerUrl);
+                    w.postMessage('start');
+                    workers.push(w);
+                }
+                
+                isRunning = true;
+                btn.innerText = "ОСТАНОВИТЬ";
+                btn.style.background = "#555";
+                statusText.innerText = "Статус: НАГРЕВ (Потоков: " + threads + ")";
+                document.body.classList.add('running');
+            } else {
+                // Остановка
+                workers.forEach(w => w.terminate());
+                workers = [];
+                isRunning = false;
+                btn.innerText = "ЗАПУСТИТЬ НАГРЕВ";
+                btn.style.background = "#ff4500";
+                statusText.innerText = "Статус: Ожидание";
+                document.body.classList.remove('running');
+            }
+        };
+    </script>
+</body>
+</html>
