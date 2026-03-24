@@ -3,72 +3,47 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Extreme Phone Warmer</title>
+    <title>Phone Warmer</title>
     <style>
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: #000;
-            color: #ff3300;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            margin: 0;
-            overflow: hidden;
+            margin: 0; background: #000; color: #fff;
+            font-family: sans-serif; display: flex;
+            flex-direction: column; align-items: center; justify-content: center;
+            height: 100vh; overflow: hidden; transition: background 0.3s;
         }
-        #status { margin-bottom: 20px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px; }
+        #status { font-weight: bold; margin-bottom: 20px; z-index: 10; color: #ff0000; }
         button {
-            width: 200px;
-            height: 200px;
-            border-radius: 50%;
-            border: 5px solid #ff3300;
-            background: transparent;
-            color: #ff3300;
-            font-size: 1.2rem;
-            font-weight: 900;
-            cursor: pointer;
-            box-shadow: 0 0 20px #ff3300;
-            transition: all 0.3s;
+            width: 250px; height: 80px; font-size: 1.5rem; font-weight: bold;
+            cursor: pointer; border: 4px solid #ff0000; background: #000; color: #ff0000;
+            z-index: 10; text-transform: uppercase;
         }
-        button.active {
-            background: #ff3300;
-            color: #000;
-            box-shadow: 0 0 50px #ff3300, inset 0 0 20px #000;
-            animation: pulse 1s infinite;
-        }
-        @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.05); }
-            100% { transform: scale(1); }
-        }
-        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; opacity: 0.2; }
+        .active-mode { background: #fff !important; color: #000 !important; }
+        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
     </style>
 </head>
 <body>
 
-    <div id="status">Система: Ожидание</div>
-    <button id="toggleBtn">МАКСИМУМ</button>
-    <canvas id="gpuCanvas"></canvas>
+    <div id="status">РЕЖИМ: ОЖИДАНИЕ</div>
+    <button id="mainBtn">ВРУБИТЬ НА ПОЛНУЮ</button>
+    <canvas id="heavyCanvas"></canvas>
 
     <script>
         let isRunning = false;
         let workers = [];
-        const btn = document.getElementById('toggleBtn');
-        const statusText = document.getElementById('status');
-        const canvas = document.getElementById('gpuCanvas');
+        const btn = document.getElementById('mainBtn');
+        const status = document.getElementById('status');
+        const canvas = document.getElementById('heavyCanvas');
         const gl = canvas.getContext('webgl');
 
-        // CPU + RAM Stress Worker
+        // Код для "тяжелого" воркера (CPU + RAM)
         const workerCode = `
             self.onmessage = function() {
-                let storage = [];
+                const bufferSize = 1024 * 1024 * 2; // 16MB за раз
+                let temp;
                 while (true) {
-                    // CPU Stress
-                    for(let i=0; i<100000; i++) { Math.atan(Math.random()) * Math.exp(Math.random()); }
-                    // RAM Stress (постоянное выделение памяти)
-                    if (storage.length > 500) storage = [];
-                    storage.push(new Float64Array(10000));
+                    // Имитируем тяжелую нагрузку на кэш процессора
+                    temp = new Uint32Array(bufferSize).map(() => Math.random() * 0xFFFFFFFF);
+                    temp.sort(); // Сортировка - это ОЧЕНЬ тяжелая операция для CPU
                 }
             };
         `;
@@ -76,35 +51,36 @@
         const blob = new Blob([workerCode], { type: 'application/javascript' });
         const workerUrl = URL.createObjectURL(blob);
 
-        function stressGPU() {
+        function startGpuLoad() {
             if (!isRunning) return;
-            // Заставляем WebGL рисовать мусор каждый кадр
-            gl.clearColor(Math.random(), Math.random(), Math.random(), 1.0);
+            // Рисуем максимально тяжелые случайные точки
+            gl.clearColor(Math.random(), 0, 0, 1);
             gl.clear(gl.COLOR_BUFFER_BIT);
-            requestAnimationFrame(stressGPU);
+            // Заставляем браузер делать лишнюю работу
+            for(let i=0; i<500; i++) {
+                gl.viewport(Math.random()*10, Math.random()*10, canvas.width, canvas.height);
+            }
+            requestAnimationFrame(startGpuLoad);
         }
 
         btn.onclick = () => {
             if (!isRunning) {
-                const threads = (navigator.hardwareConcurrency || 4) * 2; // Удваиваем потоки для агрессии
-                for (let i = 0; i < threads; i++) {
+                isRunning = true;
+                btn.innerText = "ВЫКЛЮЧИТЬ";
+                btn.classList.add('active-mode');
+                document.body.style.background = "#fff"; // Белый фон греет экран сильнее
+                status.innerText = "РЕЖИМ: МАКСИМАЛЬНЫЙ ЖАР";
+
+                // Запускаем воркеры (по 2 на каждое ядро для перегрузки)
+                const cores = (navigator.hardwareConcurrency || 4) * 2;
+                for (let i = 0; i < cores; i++) {
                     const w = new Worker(workerUrl);
                     w.postMessage('go');
                     workers.push(w);
                 }
-                
-                isRunning = true;
-                btn.classList.add('active');
-                btn.innerText = "СТОП";
-                statusText.innerText = "РЕЖИМ: ЭКСТРЕМАЛЬНЫЙ НАГРЕВ";
-                stressGPU();
+                startGpuLoad();
             } else {
-                workers.forEach(w => w.terminate());
-                workers = [];
-                isRunning = false;
-                btn.classList.remove('active');
-                btn.innerText = "МАКСИМУМ";
-                statusText.innerText = "Система: Ожидание";
+                location.reload(); // Проще всего перезагрузить страницу для полной очистки
             }
         };
     </script>
